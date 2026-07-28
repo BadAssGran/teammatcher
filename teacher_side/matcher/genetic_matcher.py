@@ -1,13 +1,18 @@
 """ Genetic algorithm student matcher """
 
+import logging
 import math
 import pygad
+
+NUM_GENERATIONS = 200
 
 from teacher_side.matcher.encoder import prepare_data
 from teacher_side.matcher.fitness_function import make_fitness_func
 
+logger = logging.getLogger(__name__)
 
-def match(df, team_template, weights, constraints):
+
+def match(df, team_template, weights, constraints, on_generation=None, random_seed=None):
     """ 
         Matches students into teams using genetic algorithm
         Args:
@@ -15,6 +20,10 @@ def match(df, team_template, weights, constraints):
             - team_template: TeamTemplate object
             - weights: list of weights for fitness function
             - constraints: dict with team size constraints
+            - on_generation: optional callback invoked by pygad after each
+              generation (used for SSE progress streaming during rematch).
+            - random_seed: optional int for deterministic runs (used for
+              GA regression tests). Same input + same seed => same output.
         Returns:
             - df with team assignments
             - target column name (str) where assignments were added
@@ -46,7 +55,7 @@ def match(df, team_template, weights, constraints):
     gene_space = list(range(n_teams))
 
     ga_instance = pygad.GA(
-        num_generations=200,
+        num_generations=NUM_GENERATIONS,
         num_parents_mating=20,
         fitness_func=fitness_func,
         sol_per_pop=40,
@@ -56,14 +65,13 @@ def match(df, team_template, weights, constraints):
         crossover_type="single_point",
         mutation_type="random",
         keep_parents=2,
-        stop_criteria=["saturate_50"]
+        stop_criteria=["saturate_50"],
+        on_generation=on_generation,
+        random_seed=random_seed,
     )
 
     ga_instance.run()
     best_solution, best_fitness, _ = ga_instance.best_solution()
-
-    print(best_solution)
-    print(type(best_solution))
 
     # builds team names from template or default names 'Team X'
     template_names = team_template.team_names if team_template else []
@@ -92,7 +100,7 @@ def match(df, team_template, weights, constraints):
     if target_col: # adds results to first empty column after 'mode'
         df[target_col] = team_assignments
     else: # creates new column 'teams'
-        print("No empty column found after 'mode'. Creating 'teams' column.")
+        logger.info("ga.no_empty_column_after_mode")
         df['teams'] = team_assignments
         target_col = 'teams'
 
